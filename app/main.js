@@ -163,8 +163,8 @@ rl.on("line", (line) => {
   }
 
   if (cmd === "cd") {
-    if (args.length > 0) {
-      const dir = args[0];
+    if (cmdArgs.length > 0) {
+      const dir = cmdArgs[0];
       let targetDir;
       if (dir === "~") {
         targetDir = process.env.HOME || dir;
