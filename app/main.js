@@ -54,13 +54,29 @@ function longestCommonPrefix(array) {
   return prefix;
 }
 
-function getFilenameMatches(prefix) {
+function getMatchesInDirectory(directory, prefix) {
   try {
-    const entries = fs.readdirSync(process.cwd());
-    return entries.filter((name) => name.startsWith(prefix)).sort();
+    const entries = fs.readdirSync(directory);
+    return entries
+      .filter((name) => name.startsWith(prefix))
+      .sort()
+      .map((name) => {
+        const candidatePath = path.join(directory, name);
+        let isDirectory = false;
+        try {
+          isDirectory = fs.statSync(candidatePath).isDirectory();
+        } catch (err) {
+          // ignore stat failures
+        }
+        return { name, isDirectory };
+      });
   } catch (err) {
     return [];
   }
+}
+
+function getFilenameMatches(prefix) {
+  return getMatchesInDirectory(process.cwd(), prefix);
 }
 
 function getNestedPathMatches(token) {
@@ -73,15 +89,11 @@ function getNestedPathMatches(token) {
   const basenamePrefix = token.slice(slashIndex + 1);
   const searchDir = path.resolve(process.cwd(), token.slice(0, slashIndex));
 
-  try {
-    const entries = fs.readdirSync(searchDir);
-    return entries
-      .filter((name) => name.startsWith(basenamePrefix))
-      .sort()
-      .map((name) => `${dirToken}${name}`);
-  } catch (err) {
-    return [];
-  }
+  const matches = getMatchesInDirectory(searchDir, basenamePrefix);
+  return matches.map((entry) => ({
+    full: `${dirToken}${entry.name}`,
+    isDirectory: entry.isDirectory,
+  }));
 }
 
 function completionHandler(line) {
@@ -101,7 +113,8 @@ function completionHandler(line) {
       if (nestedHits.length === 1) {
         completerState.prefix = null;
         completerState.count = 0;
-        return [[`${nestedHits[0]} `], prefix];
+        const suffix = nestedHits[0].isDirectory ? "/" : " ";
+        return [[`${nestedHits[0].full}${suffix}`], prefix];
       }
 
       if (!prefix.includes("/")) {
@@ -109,7 +122,8 @@ function completionHandler(line) {
         if (filenameHits.length === 1) {
           completerState.prefix = null;
           completerState.count = 0;
-          return [[`${filenameHits[0]} `], prefix];
+          const suffix = filenameHits[0].isDirectory ? "/" : " ";
+          return [[`${filenameHits[0].name}${suffix}`], prefix];
         }
       }
 
