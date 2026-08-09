@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const childProcess = require("child_process");
 const readline = require("readline");
 
 const rl = readline.createInterface({
@@ -9,6 +10,24 @@ const rl = readline.createInterface({
 });
 
 const builtins = new Set(["echo", "exit", "type"]);
+
+function findExecutable(command) {
+  const pathDirs = process.env.PATH ? process.env.PATH.split(path.delimiter) : [];
+  for (const dir of pathDirs) {
+    if (!dir) {
+      continue;
+    }
+
+    const candidate = path.join(dir, command);
+    try {
+      fs.accessSync(candidate, fs.constants.F_OK | fs.constants.X_OK);
+      return candidate;
+    } catch (err) {
+      // File missing or not executable; continue searching.
+    }
+  }
+  return null;
+}
 
 rl.prompt();
 
@@ -40,30 +59,28 @@ rl.on("line", (line) => {
       if (builtins.has(target)) {
         console.log(`${target} is a shell builtin`);
       } else {
-        const pathDirs = process.env.PATH ? process.env.PATH.split(path.delimiter) : [];
-        let found = false;
-        for (const dir of pathDirs) {
-          if (!dir) {
-            continue;
-          }
-
-          const candidate = path.join(dir, target);
-          try {
-            fs.accessSync(candidate, fs.constants.F_OK | fs.constants.X_OK);
-            console.log(`${target} is ${candidate}`);
-            found = true;
-            break;
-          } catch (err) {
-            // File missing or not executable; continue searching.
-          }
-        }
-
-        if (!found) {
+        const resolved = findExecutable(target);
+        if (resolved) {
+          console.log(`${target} is ${resolved}`);
+        } else {
           console.log(`${target}: not found`);
         }
       }
     }
     rl.prompt();
+    return;
+  }
+
+  const resolved = findExecutable(cmd);
+  if (resolved) {
+    const child = childProcess.spawn(resolved, args, { stdio: "inherit" });
+    child.on("close", () => {
+      rl.prompt();
+    });
+    child.on("error", () => {
+      console.log(`${cmd}: command not found`);
+      rl.prompt();
+    });
     return;
   }
 
