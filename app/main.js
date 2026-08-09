@@ -402,6 +402,19 @@ function executeBuiltin(argv, { stdoutStream = process.stdout, stderrStream = pr
       return 0;
     }
 
+    if (argv.length >= 2 && argv[1] === "-w") {
+      if (argv.length >= 3) {
+        try {
+          const data = history.join("\n") + "\n";
+          fs.writeFileSync(argv[2], data, { encoding: "utf8" });
+        } catch (err) {
+          stderrStream.write(`history: cannot write ${argv[2]}\n`);
+          return 1;
+        }
+      }
+      return 0;
+    }
+
     let start = 0;
     if (argv.length >= 2) {
       const requested = Number(argv[1]);
@@ -851,6 +864,19 @@ rl.on("line", (line) => {
           }
         } catch (err) {
           writeError(stderrRedirect, `history: cannot read ${cmdArgs[1]}`);
+        }
+      }
+      prompt();
+      return;
+    }
+
+    if (cmdArgs.length >= 1 && cmdArgs[0] === "-w") {
+      if (cmdArgs.length >= 2) {
+        try {
+          const data = history.join("\n") + "\n";
+          fs.writeFileSync(cmdArgs[1], data, { encoding: "utf8" });
+        } catch (err) {
+          writeError(stderrRedirect, `history: cannot write ${cmdArgs[1]}`);
         }
       }
       prompt();
