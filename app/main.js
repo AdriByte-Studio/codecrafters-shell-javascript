@@ -40,6 +40,9 @@ const completerState = {
   count: 0,
 };
 
+// Map of registered completion specs: command -> { type: 'C', path }
+const completionSpecs = new Map();
+
 function longestCommonPrefix(array) {
   if (array.length === 0) return "";
   let prefix = array[0];
@@ -460,11 +463,37 @@ rl.on("line", (line) => {
   }
 
   if (cmd === "complete") {
-    // Support `complete -p <command>` by printing the "no completion specification" error
-    if (cmdArgs.length >= 2 && cmdArgs[0] === "-p") {
-      const target = cmdArgs[1];
-      console.log(`complete: ${target}: no completion specification`);
+    // Support `complete -C <path> <command>` to register a completer script
+    // and `complete -p <command>` to display the registered spec.
+    if (cmdArgs.length >= 1) {
+      const flag = cmdArgs[0];
+      if (flag === "-C") {
+        // register: cmdArgs[1] = path, cmdArgs[2] = command
+        if (cmdArgs.length >= 3) {
+          const scriptPath = cmdArgs[1];
+          const targetCmd = cmdArgs[2];
+          completionSpecs.set(targetCmd, { type: "C", path: scriptPath });
+        }
+        rl.prompt();
+        return;
+      }
+
+      if (flag === "-p") {
+        if (cmdArgs.length >= 2) {
+          const target = cmdArgs[1];
+          const spec = completionSpecs.get(target);
+          if (spec && spec.type === "C") {
+            // normalized output: complete -C '<path>' <command>
+            console.log(`complete -C '${spec.path}' ${target}`);
+          } else {
+            console.log(`complete: ${target}: no completion specification`);
+          }
+        }
+        rl.prompt();
+        return;
+      }
     }
+
     rl.prompt();
     return;
   }
