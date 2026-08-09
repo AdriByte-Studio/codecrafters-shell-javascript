@@ -6,6 +6,8 @@ const rl = readline.createInterface({
   prompt: "$ ",
 });
 
+const builtins = new Set(["echo", "exit", "type"]);
+
 rl.prompt();
 
 rl.on("line", (line) => {
@@ -26,6 +28,19 @@ rl.on("line", (line) => {
 
   if (cmd === "echo") {
     console.log(args.join(" "));
+    rl.prompt();
+    return;
+  }
+
+  if (cmd === "type") {
+    if (args.length > 0) {
+      const target = args[0];
+      if (builtins.has(target)) {
+        console.log(`${target} is a shell builtin`);
+      } else {
+        console.log(`${target}: not found`);
+      }
+    }
     rl.prompt();
     return;
   }
