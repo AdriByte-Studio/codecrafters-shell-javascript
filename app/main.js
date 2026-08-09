@@ -459,6 +459,16 @@ rl.on("line", (line) => {
     return;
   }
 
+  if (cmd === "complete") {
+    // Support `complete -p <command>` by printing the "no completion specification" error
+    if (cmdArgs.length >= 2 && cmdArgs[0] === "-p") {
+      const target = cmdArgs[1];
+      console.log(`complete: ${target}: no completion specification`);
+    }
+    rl.prompt();
+    return;
+  }
+
   const resolved = findExecutable(cmd);
   if (resolved) {
     const stdio = ["inherit", "inherit", "inherit"];
