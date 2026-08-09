@@ -433,6 +433,78 @@ function parseCommandLine(line) {
   return { args, stdoutRedirect, stdoutAppend, stderrRedirect, stderrAppend };
 }
 
+function splitUnquoted(line, sep) {
+  const parts = [];
+  let current = "";
+  let quote = null;
+  let escapeNext = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (escapeNext) {
+      current += ch;
+      escapeNext = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escapeNext = true;
+      current += ch;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+      }
+      current += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+    if (ch === sep) {
+      parts.push(current);
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  parts.push(current);
+  return parts;
+}
+
+function stripTrailingUnquotedAmp(line) {
+  let quote = null;
+  let escapeNext = false;
+  for (let i = line.length - 1; i >= 0; i -= 1) {
+    const ch = line[i];
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escapeNext = true;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '&') {
+      const before = line.slice(0, i).trimEnd();
+      return { line: before, hadAmp: true };
+    }
+    if (!/\s/.test(ch)) {
+      break;
+    }
+  }
+  return { line, hadAmp: false };
+}
+
 function findExecutable(command) {
   const pathDirs = process.env.PATH ? process.env.PATH.split(path.delimiter) : [];
   for (const dir of pathDirs) {
@@ -480,6 +552,74 @@ rl.on("line", (line) => {
   const { args, stdoutRedirect, stdoutAppend, stderrRedirect, stderrAppend } = parseCommandLine(line);
   if (args.length === 0) {
     prompt();
+    return;
+  }
+
+  // Handle simple two-command pipelines separated by unquoted '|'
+  const { line: strippedLine, hadAmp } = stripTrailingUnquotedAmp(line);
+  const pipelineParts = splitUnquoted(strippedLine, '|').map((s) => s.trim());
+  const pipelineMode = pipelineParts.length > 1;
+  if (pipelineMode) {
+    // Only support two-stage pipelines for this stage. Join rest into second part if more.
+    const left = pipelineParts[0];
+    const right = pipelineParts.slice(1).join('|');
+    const leftParsed = parseCommandLine(left);
+    const rightParsed = parseCommandLine(right);
+    if (leftParsed.args.length === 0 || rightParsed.args.length === 0) {
+      prompt();
+      return;
+    }
+
+    const leftCmd = leftParsed.args[0];
+    const rightCmd = rightParsed.args[0];
+    const leftResolved = findExecutable(leftCmd);
+    const rightResolved = findExecutable(rightCmd);
+    if (!leftResolved) {
+      console.log(`${leftCmd}: command not found`);
+      prompt();
+      return;
+    }
+    if (!rightResolved) {
+      console.log(`${rightCmd}: command not found`);
+      prompt();
+      return;
+    }
+
+    // Prepare stdio for left and right. Left stdout -> pipe, right stdin -> pipe.
+    const leftStdio = ['inherit', 'pipe', 'inherit'];
+    const rightStdio = ['pipe', 'inherit', 'inherit'];
+
+    // Start left process
+    const leftChild = childProcess.spawn(leftResolved, leftParsed.args.slice(1), { stdio: leftStdio, argv0: leftCmd });
+    // Start right process
+    const rightChild = childProcess.spawn(rightResolved, rightParsed.args.slice(1), { stdio: rightStdio, argv0: rightCmd });
+
+    // Pipe left stdout to right stdin
+    if (leftChild.stdout && rightChild.stdin) {
+      leftChild.stdout.pipe(rightChild.stdin);
+    }
+
+    if (hadAmp) {
+      // Background pipeline: report job for the last process (right)
+      const jobId = allocateJobId();
+      const info = { pid: rightChild.pid, cmd: `${leftParsed.args.join(' ')} | ${rightParsed.args.join(' ')}`, child: rightChild, status: 'Running' };
+      jobs.set(jobId, info);
+      rightChild.on('exit', () => { info.status = 'Done'; });
+      console.log(`[${jobId}] ${rightChild.pid}`);
+      try { leftChild.unref(); } catch (e) {}
+      try { rightChild.unref(); } catch (e) {}
+      prompt();
+      return;
+    }
+
+    // Foreground pipeline: wait for right child to finish
+    rightChild.on('close', () => {
+      prompt();
+    });
+    rightChild.on('error', () => {
+      console.log(`${rightCmd}: command not found`);
+      prompt();
+    });
     return;
   }
 
