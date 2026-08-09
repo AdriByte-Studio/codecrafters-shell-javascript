@@ -111,21 +111,23 @@ function completionHandler(line) {
   const lastSpaceIndex = line.lastIndexOf(" ");
   if (lastSpaceIndex !== -1) {
     const token = line.slice(lastSpaceIndex + 1);
-    // If token is empty (user typed a space after the command), check for a registered completer
-    if (token.length === 0) {
-      const before = line.slice(0, lastSpaceIndex).trim();
-      const commandName = before.split(/\s+/)[0] || "";
-      const spec = completionSpecs.get(commandName);
-      if (spec && spec.type === "C") {
-        try {
-          const out = childProcess.execFileSync(spec.path, { encoding: "utf8" });
-          const candidate = out.split(/\r?\n/)[0].trim();
-          if (candidate.length > 0) {
-            return [[`${candidate} `], token];
-          }
-        } catch (err) {
-          // on error, fall through to normal behavior (bell)
+    // Determine words before the token to build completer args
+    const before = line.slice(0, lastSpaceIndex).trim();
+    const wordsBefore = before.length ? before.split(/\s+/) : [];
+    const commandName = wordsBefore.length ? wordsBefore[0] : "";
+    const previousWord = wordsBefore.length ? wordsBefore[wordsBefore.length - 1] : "";
+
+    // If a completer is registered for the command, invoke it with (command, token, previousWord)
+    const spec = completionSpecs.get(commandName);
+    if (spec && spec.type === "C") {
+      try {
+        const out = childProcess.execFileSync(spec.path, [commandName, token, previousWord], { encoding: "utf8" });
+        const candidate = out.split(/\r?\n/)[0].trim();
+        if (candidate.length > 0) {
+          return [[`${candidate} `], token];
         }
+      } catch (err) {
+        // on error, fall through to normal behavior (bell)
       }
     }
 
