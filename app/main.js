@@ -4,17 +4,54 @@ const childProcess = require("child_process");
 const readline = require("readline");
 
 const completions = ["echo", "exit"];
+
+function getPathExecutables(prefix) {
+  const entries = new Set();
+  const pathEnv = process.env.PATH || "";
+  const pathDirs = pathEnv.split(path.delimiter);
+  for (const dir of pathDirs) {
+    if (!dir) {
+      continue;
+    }
+    try {
+      const names = fs.readdirSync(dir);
+      for (const name of names) {
+        if (!name.startsWith(prefix)) {
+          continue;
+        }
+        const candidate = path.join(dir, name);
+        try {
+          fs.accessSync(candidate, fs.constants.F_OK | fs.constants.X_OK);
+          entries.add(name);
+        } catch (err) {
+          // ignore non-executable or inaccessible files
+        }
+      }
+    } catch (err) {
+      // ignore directories that can't be read or don't exist
+    }
+  }
+  return Array.from(entries).sort();
+}
+
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
   prompt: "$ ",
   completer: (line) => {
-    const hits = completions.filter((cmd) => cmd.startsWith(line));
-    if (hits.length === 0) {
+    const trimmed = line.trimStart();
+    if (trimmed.includes(" ")) {
       process.stdout.write("\x07");
       return [[], line];
     }
-    return [hits.map((cmd) => `${cmd} `), line];
+    const hits = completions.filter((cmd) => cmd.startsWith(trimmed));
+    const pathHits = getPathExecutables(trimmed);
+    const allHits = [...new Set([...hits, ...pathHits])];
+    if (allHits.length === 0) {
+      process.stdout.write("\x07");
+      return [[], line];
+    }
+    return [allHits.map((cmd) => `${cmd} `), line];
   },
 });
 
