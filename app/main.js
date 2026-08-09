@@ -34,6 +34,19 @@ function parseCommandLine(line) {
     }
 
     if (quoteChar) {
+      if (quoteChar === '"' && char === "\\") {
+        const nextChar = line[i + 1];
+        if (nextChar === '"' || nextChar === "\\") {
+          current += nextChar;
+          i += 1;
+          argStarted = true;
+          continue;
+        }
+        current += char;
+        argStarted = true;
+        continue;
+      }
+
       if (char === quoteChar) {
         quoteChar = null;
       } else {
