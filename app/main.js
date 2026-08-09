@@ -3,10 +3,15 @@ const path = require("path");
 const childProcess = require("child_process");
 const readline = require("readline");
 
+const completions = ["echo", "exit"];
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
   prompt: "$ ",
+  completer: (line) => {
+    const hits = completions.filter((cmd) => cmd.startsWith(line));
+    return [hits.map((cmd) => `${cmd} `), line];
+  },
 });
 
 const builtins = new Set(["echo", "exit", "type", "pwd", "cd"]);
