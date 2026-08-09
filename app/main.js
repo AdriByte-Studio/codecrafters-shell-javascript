@@ -69,7 +69,20 @@ function parseCommandLine(line) {
     }
 
     if (char === ">") {
-      if (current === "1") {
+      const nextChar = line[i + 1];
+      if (nextChar === ">") {
+        if (current === "1") {
+          tokens.push("1>>");
+          current = "";
+        } else if (current === "2") {
+          tokens.push("2>>");
+          current = "";
+        } else {
+          pushCurrent();
+          tokens.push(">>");
+        }
+        i += 1;
+      } else if (current === "1") {
         tokens.push("1>");
         current = "";
       } else if (current === "2") {
@@ -90,11 +103,22 @@ function parseCommandLine(line) {
   const args = [];
   let stdoutRedirect = null;
   let stderrRedirect = null;
+  let stdoutAppend = false;
+  let stderrAppend = false;
   for (let i = 0; i < tokens.length; i += 1) {
     const token = tokens[i];
     if (token === ">" || token === "1>") {
       if (i + 1 < tokens.length) {
         stdoutRedirect = tokens[i + 1];
+        stdoutAppend = false;
+        i += 1;
+      }
+      continue;
+    }
+    if (token === ">>" || token === "1>>") {
+      if (i + 1 < tokens.length) {
+        stdoutRedirect = tokens[i + 1];
+        stdoutAppend = true;
         i += 1;
       }
       continue;
@@ -102,6 +126,15 @@ function parseCommandLine(line) {
     if (token === "2>") {
       if (i + 1 < tokens.length) {
         stderrRedirect = tokens[i + 1];
+        stderrAppend = false;
+        i += 1;
+      }
+      continue;
+    }
+    if (token === "2>>") {
+      if (i + 1 < tokens.length) {
+        stderrRedirect = tokens[i + 1];
+        stderrAppend = true;
         i += 1;
       }
       continue;
@@ -109,7 +142,7 @@ function parseCommandLine(line) {
     args.push(token);
   }
 
-  return { args, stdoutRedirect, stderrRedirect };
+  return { args, stdoutRedirect, stdoutAppend, stderrRedirect, stderrAppend };
 }
 
 function findExecutable(command) {
@@ -132,9 +165,10 @@ function findExecutable(command) {
 
 rl.prompt();
 
-function writeOutput(destination, text) {
+function writeOutput(destination, text, append = false) {
   if (destination) {
-    fs.writeFileSync(destination, text + "\n", { encoding: "utf8" });
+    const flag = append ? "a" : "w";
+    fs.writeFileSync(destination, text + "\n", { encoding: "utf8", flag });
   } else {
     console.log(text);
   }
@@ -155,7 +189,7 @@ rl.on("line", (line) => {
     return;
   }
 
-  const { args, stdoutRedirect, stderrRedirect } = parseCommandLine(line);
+  const { args, stdoutRedirect, stdoutAppend, stderrRedirect, stderrAppend } = parseCommandLine(line);
   if (args.length === 0) {
     rl.prompt();
     return;
@@ -170,18 +204,18 @@ rl.on("line", (line) => {
   }
 
   if (cmd === "echo") {
-    writeOutput(stdoutRedirect, cmdArgs.join(" "));
+    writeOutput(stdoutRedirect, cmdArgs.join(" "), stdoutAppend);
     if (stderrRedirect) {
-      fs.closeSync(fs.openSync(stderrRedirect, "w"));
+      fs.closeSync(fs.openSync(stderrRedirect, stderrAppend ? "a" : "w"));
     }
     rl.prompt();
     return;
   }
 
   if (cmd === "pwd") {
-    writeOutput(stdoutRedirect, process.cwd());
+    writeOutput(stdoutRedirect, process.cwd(), stdoutAppend);
     if (stderrRedirect) {
-      fs.closeSync(fs.openSync(stderrRedirect, "w"));
+      fs.closeSync(fs.openSync(stderrRedirect, stderrAppend ? "a" : "w"));
     }
     rl.prompt();
     return;
@@ -238,11 +272,13 @@ rl.on("line", (line) => {
     let stdoutFd;
     let stderrFd;
     if (stdoutRedirect) {
-      stdoutFd = fs.openSync(stdoutRedirect, "w");
+      const stdoutFlag = stdoutAppend ? "a" : "w";
+      stdoutFd = fs.openSync(stdoutRedirect, stdoutFlag);
       stdio[1] = stdoutFd;
     }
     if (stderrRedirect) {
-      stderrFd = fs.openSync(stderrRedirect, "w");
+      const stderrFlag = stderrAppend ? "a" : "w";
+      stderrFd = fs.openSync(stderrRedirect, stderrFlag);
       stdio[2] = stderrFd;
     }
 
