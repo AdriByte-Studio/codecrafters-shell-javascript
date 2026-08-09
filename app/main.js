@@ -684,9 +684,11 @@ rl.on("line", (line) => {
         return;
       }
       const rightChild = childProcess.spawn(rightResolved, rightParsed.args.slice(1), { stdio: ['pipe', 'inherit', 'inherit'], argv0: rightCmd });
-      // run builtin writing to leftStream, pipe into rightChild.stdin
-      executeBuiltin(leftParsed.args, { stdoutStream: leftStream, stderrStream: process.stderr });
+      // pipe before writing to ensure data is delivered
       leftStream.pipe(rightChild.stdin);
+      // run builtin writing to leftStream, then end it
+      executeBuiltin(leftParsed.args, { stdoutStream: leftStream, stderrStream: process.stderr });
+      leftStream.end();
 
       if (hadAmp) {
         const jobId = allocateJobId();
