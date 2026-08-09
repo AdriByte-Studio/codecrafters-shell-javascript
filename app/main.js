@@ -46,10 +46,16 @@ function expandWords(words) {
     const expanded = String(w).replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_, name) => {
       return Object.prototype.hasOwnProperty.call(shellVariables, name) ? shellVariables[name] : "";
     });
-    // split on whitespace so a variable value with spaces becomes multiple args
-    const parts = expanded.length === 0 ? [""] : expanded.split(/\s+/);
-    for (const p of parts) {
-      if (p.length > 0) out.push(p);
+    // If the original token contained a variable, splitting is allowed
+    // so values with spaces become multiple args. Otherwise keep
+    // the token intact so quoted commands with spaces remain single.
+    if (String(w).includes("$")) {
+      const parts = expanded.length === 0 ? [""] : expanded.split(/\s+/);
+      for (const p of parts) {
+        if (p.length > 0) out.push(p);
+      }
+    } else {
+      out.push(expanded);
     }
   }
   return out;
