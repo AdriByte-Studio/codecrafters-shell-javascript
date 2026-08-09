@@ -569,7 +569,21 @@ rl.on("line", (line) => {
   }
 
   if (cmd === "jobs") {
-    // Empty implementation for now: no background jobs tracked yet
+    // List background jobs. For this stage we only need to list running jobs tracked in `jobs`.
+    // Format: [1]+  Running                 sleep 10 &
+    const entries = Array.from(jobs.entries());
+    if (entries.length > 0) {
+      // The most recent job is the last one inserted
+      const lastIndex = entries.length - 1;
+      for (let i = 0; i < entries.length; i += 1) {
+        const [jobId, info] = entries[i];
+        const marker = i === lastIndex ? "+" : " ";
+        const status = "Running";
+        const paddedStatus = status + "".padEnd(24 - status.length, " ");
+        // Show command with trailing & for background
+        console.log(`[${jobId}]${marker}  ${paddedStatus}${info.cmd} &`);
+      }
+    }
     rl.prompt();
     return;
   }
