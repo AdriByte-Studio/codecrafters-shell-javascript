@@ -9,7 +9,7 @@ const rl = readline.createInterface({
   prompt: "$ ",
 });
 
-const builtins = new Set(["echo", "exit", "type"]);
+const builtins = new Set(["echo", "exit", "type", "pwd"]);
 
 function findExecutable(command) {
   const pathDirs = process.env.PATH ? process.env.PATH.split(path.delimiter) : [];
@@ -49,6 +49,12 @@ rl.on("line", (line) => {
 
   if (cmd === "echo") {
     console.log(args.join(" "));
+    rl.prompt();
+    return;
+  }
+
+  if (cmd === "pwd") {
+    console.log(process.cwd());
     rl.prompt();
     return;
   }
