@@ -465,6 +465,7 @@ function executeBuiltin(argv, { stdoutStream = process.stdout, stderrStream = pr
       return 0;
     }
 
+    const identifierPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
     for (const arg of args) {
       if (arg.startsWith("-")) {
         continue;
@@ -475,9 +476,11 @@ function executeBuiltin(argv, { stdoutStream = process.stdout, stderrStream = pr
       }
       const variable = arg.slice(0, equalIndex);
       const value = arg.slice(equalIndex + 1);
-      if (variable.length > 0) {
-        shellVariables[variable] = value;
+      if (variable.length === 0 || !identifierPattern.test(variable)) {
+        stderrStream.write("declare: `" + arg + "`: not a valid identifier\n");
+        return 1;
       }
+      shellVariables[variable] = value;
     }
     return 0;
   }
