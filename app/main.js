@@ -12,18 +12,23 @@ const rl = readline.createInterface({
 const builtins = new Set(["echo", "exit", "type", "pwd", "cd"]);
 
 function parseCommandLine(line) {
-  const args = [];
+  const tokens = [];
   let current = "";
   let quoteChar = null;
-  let argStarted = false;
   let escapeNext = false;
+
+  const pushCurrent = () => {
+    if (current.length > 0) {
+      tokens.push(current);
+      current = "";
+    }
+  };
 
   for (let i = 0; i < line.length; i += 1) {
     const char = line[i];
 
     if (escapeNext) {
       current += char;
-      argStarted = true;
       escapeNext = false;
       continue;
     }
@@ -39,11 +44,9 @@ function parseCommandLine(line) {
         if (nextChar === '"' || nextChar === "\\") {
           current += nextChar;
           i += 1;
-          argStarted = true;
           continue;
         }
         current += char;
-        argStarted = true;
         continue;
       }
 
@@ -57,28 +60,45 @@ function parseCommandLine(line) {
 
     if (char === "'" || char === '"') {
       quoteChar = char;
-      argStarted = true;
       continue;
     }
 
     if (char === " " || char === "\t") {
-      if (argStarted) {
-        args.push(current);
+      pushCurrent();
+      continue;
+    }
+
+    if (char === ">") {
+      if (current === "1") {
+        tokens.push("1>");
         current = "";
-        argStarted = false;
+      } else {
+        pushCurrent();
+        tokens.push(">");
       }
       continue;
     }
 
     current += char;
-    argStarted = true;
   }
 
-  if (argStarted || current.length > 0) {
-    args.push(current);
+  pushCurrent();
+
+  const args = [];
+  let redirect = null;
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+    if (token === ">" || token === "1>") {
+      if (i + 1 < tokens.length) {
+        redirect = tokens[i + 1];
+        i += 1;
+      }
+      continue;
+    }
+    args.push(token);
   }
 
-  return args;
+  return { args, redirect };
 }
 
 function findExecutable(command) {
@@ -101,6 +121,14 @@ function findExecutable(command) {
 
 rl.prompt();
 
+function writeOutput(destination, text) {
+  if (destination) {
+    fs.writeFileSync(destination, text + "\n", { encoding: "utf8" });
+  } else {
+    console.log(text);
+  }
+}
+
 rl.on("line", (line) => {
   const trimmed = line.trim();
   if (trimmed.length === 0) {
@@ -108,9 +136,14 @@ rl.on("line", (line) => {
     return;
   }
 
-  const parts = parseCommandLine(line);
-  const cmd = parts[0];
-  const args = parts.slice(1);
+  const { args, redirect } = parseCommandLine(line);
+  if (args.length === 0) {
+    rl.prompt();
+    return;
+  }
+
+  const cmd = args[0];
+  const cmdArgs = args.slice(1);
 
   if (cmd === "exit") {
     rl.close();
@@ -118,13 +151,13 @@ rl.on("line", (line) => {
   }
 
   if (cmd === "echo") {
-    console.log(args.join(" "));
+    writeOutput(redirect, cmdArgs.join(" "));
     rl.prompt();
     return;
   }
 
   if (cmd === "pwd") {
-    console.log(process.cwd());
+    writeOutput(redirect, process.cwd());
     rl.prompt();
     return;
   }
@@ -176,11 +209,24 @@ rl.on("line", (line) => {
 
   const resolved = findExecutable(cmd);
   if (resolved) {
-    const child = childProcess.spawn(resolved, args, { stdio: "inherit", argv0: cmd });
+    const stdio = ["inherit", "inherit", "inherit"];
+    let fd;
+    if (redirect) {
+      fd = fs.openSync(redirect, "w");
+      stdio[1] = fd;
+    }
+
+    const child = childProcess.spawn(resolved, cmdArgs, { stdio, argv0: cmd });
     child.on("close", () => {
+      if (fd !== undefined) {
+        fs.closeSync(fd);
+      }
       rl.prompt();
     });
     child.on("error", () => {
+      if (fd !== undefined) {
+        fs.closeSync(fd);
+      }
       console.log(`${cmd}: command not found`);
       rl.prompt();
     });
