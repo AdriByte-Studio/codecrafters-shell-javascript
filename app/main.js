@@ -40,6 +40,20 @@ const completerState = {
   count: 0,
 };
 
+function longestCommonPrefix(array) {
+  if (array.length === 0) return "";
+  let prefix = array[0];
+  for (let i = 1; i < array.length; i += 1) {
+    while (!array[i].startsWith(prefix)) {
+      prefix = prefix.slice(0, -1);
+      if (prefix === "") {
+        return "";
+      }
+    }
+  }
+  return prefix;
+}
+
 function completionHandler(line) {
   const trimmed = line.trimStart();
   if (trimmed.includes(" ") || trimmed.length === 0) {
@@ -64,6 +78,13 @@ function completionHandler(line) {
     completerState.prefix = null;
     completerState.count = 0;
     return [[`${allHits[0]} `], line];
+  }
+
+  const commonPrefix = longestCommonPrefix(allHits);
+  if (commonPrefix.length > trimmed.length) {
+    completerState.prefix = null;
+    completerState.count = 0;
+    return [[commonPrefix], line];
   }
 
   if (completerState.prefix === trimmed) {
