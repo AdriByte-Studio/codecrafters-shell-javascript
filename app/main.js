@@ -16,9 +16,22 @@ function parseCommandLine(line) {
   let current = "";
   let quoteChar = null;
   let argStarted = false;
+  let escapeNext = false;
 
   for (let i = 0; i < line.length; i += 1) {
     const char = line[i];
+
+    if (escapeNext) {
+      current += char;
+      argStarted = true;
+      escapeNext = false;
+      continue;
+    }
+
+    if (!quoteChar && char === "\\") {
+      escapeNext = true;
+      continue;
+    }
 
     if (quoteChar) {
       if (char === quoteChar) {
