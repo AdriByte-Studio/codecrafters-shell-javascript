@@ -62,18 +62,17 @@ rl.on("line", (line) => {
   if (cmd === "cd") {
     if (args.length > 0) {
       const dir = args[0];
-      if (dir.startsWith("/")) {
-        try {
-          fs.accessSync(dir, fs.constants.F_OK);
-          const stat = fs.statSync(dir);
-          if (stat.isDirectory()) {
-            process.chdir(dir);
-          } else {
-            console.log(`cd: ${dir}: No such file or directory`);
-          }
-        } catch (err) {
+      const targetDir = dir.startsWith("/") ? dir : path.resolve(process.cwd(), dir);
+      try {
+        fs.accessSync(targetDir, fs.constants.F_OK);
+        const stat = fs.statSync(targetDir);
+        if (stat.isDirectory()) {
+          process.chdir(targetDir);
+        } else {
           console.log(`cd: ${dir}: No such file or directory`);
         }
+      } catch (err) {
+        console.log(`cd: ${dir}: No such file or directory`);
       }
     }
     rl.prompt();
