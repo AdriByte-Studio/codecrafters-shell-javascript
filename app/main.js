@@ -34,25 +34,60 @@ function getPathExecutables(prefix) {
   return Array.from(entries).sort();
 }
 
-const rl = readline.createInterface({
+let rl;
+const completerState = {
+  prefix: null,
+  count: 0,
+};
+
+function completionHandler(line) {
+  const trimmed = line.trimStart();
+  if (trimmed.includes(" ") || trimmed.length === 0) {
+    process.stdout.write("\x07");
+    completerState.prefix = null;
+    completerState.count = 0;
+    return [[], line];
+  }
+
+  const hits = completions.filter((cmd) => cmd.startsWith(trimmed));
+  const pathHits = getPathExecutables(trimmed);
+  const allHits = [...new Set([...hits, ...pathHits])].sort();
+
+  if (allHits.length === 0) {
+    process.stdout.write("\x07");
+    completerState.prefix = null;
+    completerState.count = 0;
+    return [[], line];
+  }
+
+  if (allHits.length === 1) {
+    completerState.prefix = null;
+    completerState.count = 0;
+    return [[`${allHits[0]} `], line];
+  }
+
+  if (completerState.prefix === trimmed) {
+    completerState.count += 1;
+  } else {
+    completerState.prefix = trimmed;
+    completerState.count = 1;
+  }
+
+  if (completerState.count === 1) {
+    process.stdout.write("\x07");
+    return [[], line];
+  }
+
+  process.stdout.write(`\n${allHits.join("  ")}\n`);
+  rl.prompt(true);
+  return [[], line];
+}
+
+rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
   prompt: "$ ",
-  completer: (line) => {
-    const trimmed = line.trimStart();
-    if (trimmed.includes(" ")) {
-      process.stdout.write("\x07");
-      return [[], line];
-    }
-    const hits = completions.filter((cmd) => cmd.startsWith(trimmed));
-    const pathHits = getPathExecutables(trimmed);
-    const allHits = [...new Set([...hits, ...pathHits])];
-    if (allHits.length === 0) {
-      process.stdout.write("\x07");
-      return [[], line];
-    }
-    return [allHits.map((cmd) => `${cmd} `), line];
-  },
+  completer: completionHandler,
 });
 
 const builtins = new Set(["echo", "exit", "type", "pwd", "cd"]);
