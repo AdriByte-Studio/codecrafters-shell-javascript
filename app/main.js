@@ -14,23 +14,23 @@ const builtins = new Set(["echo", "exit", "type", "pwd", "cd"]);
 function parseCommandLine(line) {
   const args = [];
   let current = "";
-  let inQuote = false;
+  let quoteChar = null;
   let argStarted = false;
 
   for (let i = 0; i < line.length; i += 1) {
     const char = line[i];
 
-    if (inQuote) {
-      if (char === "'") {
-        inQuote = false;
+    if (quoteChar) {
+      if (char === quoteChar) {
+        quoteChar = null;
       } else {
         current += char;
       }
       continue;
     }
 
-    if (char === "'") {
-      inQuote = true;
+    if (char === "'" || char === '"') {
+      quoteChar = char;
       argStarted = true;
       continue;
     }
