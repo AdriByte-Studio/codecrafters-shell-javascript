@@ -190,8 +190,8 @@ rl.on("line", (line) => {
   }
 
   if (cmd === "type") {
-    if (args.length > 0) {
-      const target = args[0];
+    if (cmdArgs.length > 0) {
+      const target = cmdArgs[0];
       if (builtins.has(target)) {
         console.log(`${target} is a shell builtin`);
       } else {
