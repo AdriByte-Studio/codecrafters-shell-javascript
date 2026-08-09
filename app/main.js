@@ -38,6 +38,23 @@ function getPathExecutables(prefix) {
   return Array.from(entries).sort();
 }
 
+function expandWords(words) {
+  if (!words || words.length === 0) return words;
+  const out = [];
+  for (const w of words) {
+    // replace $NAME with the shell variable value (or empty string when undefined)
+    const expanded = String(w).replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_, name) => {
+      return Object.prototype.hasOwnProperty.call(shellVariables, name) ? shellVariables[name] : "";
+    });
+    // split on whitespace so a variable value with spaces becomes multiple args
+    const parts = expanded.length === 0 ? [""] : expanded.split(/\s+/);
+    for (const p of parts) {
+      if (p.length > 0) out.push(p);
+    }
+  }
+  return out;
+}
+
 let rl;
 const completerState = {
   prefix: null,
@@ -771,7 +788,8 @@ rl.on("line", (line) => {
   }
 
   history.push(trimmed);
-  const { args, stdoutRedirect, stdoutAppend, stderrRedirect, stderrAppend } = parseCommandLine(line);
+  let { args, stdoutRedirect, stdoutAppend, stderrRedirect, stderrAppend } = parseCommandLine(line);
+  args = expandWords(args);
   if (args.length === 0) {
     prompt();
     return;
@@ -782,6 +800,9 @@ rl.on("line", (line) => {
   const pipelineMode = pipelineParts.length > 1;
   if (pipelineMode) {
     const stages = pipelineParts.map((part) => parseCommandLine(part));
+    for (const stage of stages) {
+      stage.args = expandWords(stage.args);
+    }
     if (stages.some((stage) => stage.args.length === 0)) {
       prompt();
       return;
