@@ -610,9 +610,13 @@ rl.on("line", (line) => {
       }
 
       const child = childProcess.spawn(resolved, cmdArgs, { stdio, detached: true, argv0: cmd });
-      // Register job
+      // Register job with status and keep child for exit handling
       const jobId = nextJobId++;
-      jobs.set(jobId, { pid: child.pid, cmd: args.join(" ") });
+      const info = { pid: child.pid, cmd: args.join(" "), child, status: "Running" };
+      jobs.set(jobId, info);
+      child.on("exit", () => {
+        info.status = "Done";
+      });
       console.log(`[${jobId}] ${child.pid}`);
 
       if (stdoutFd !== undefined) {
