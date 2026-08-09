@@ -62,7 +62,14 @@ rl.on("line", (line) => {
   if (cmd === "cd") {
     if (args.length > 0) {
       const dir = args[0];
-      const targetDir = dir.startsWith("/") ? dir : path.resolve(process.cwd(), dir);
+      let targetDir;
+      if (dir === "~") {
+        targetDir = process.env.HOME || dir;
+      } else if (dir.startsWith("/")) {
+        targetDir = dir;
+      } else {
+        targetDir = path.resolve(process.cwd(), dir);
+      }
       try {
         fs.accessSync(targetDir, fs.constants.F_OK);
         const stat = fs.statSync(targetDir);
