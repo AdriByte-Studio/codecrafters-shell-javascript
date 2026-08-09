@@ -258,6 +258,39 @@ rl = readline.createInterface({
   completer: completionHandler,
 });
 
+function reapJobs() {
+  const entries = Array.from(jobs.entries());
+  if (entries.length === 0) return;
+  const lastIndex = entries.length - 1;
+  for (let i = 0; i < entries.length; i += 1) {
+    const [jobId, info] = entries[i];
+    let isRunning = true;
+    try {
+      process.kill(info.pid, 0);
+    } catch (err) {
+      isRunning = false;
+    }
+    if (!isRunning) {
+      let marker = " ";
+      if (i === lastIndex) marker = "+";
+      else if (i === lastIndex - 1) marker = "-";
+      const status = "Done";
+      const paddedStatus = status + "".padEnd(24 - status.length, " ");
+      console.log(`[${jobId}]${marker}  ${paddedStatus}${info.cmd}`);
+      jobs.delete(jobId);
+    }
+  }
+}
+
+function prompt() {
+  try {
+    reapJobs();
+  } catch (e) {
+    // ignore reaping errors
+  }
+  rl.prompt();
+}
+
 const builtins = new Set(["echo", "exit", "type", "pwd", "cd", "complete", "jobs"]);
 
 function parseCommandLine(line) {
@@ -412,7 +445,7 @@ function findExecutable(command) {
   return null;
 }
 
-rl.prompt();
+prompt();
 
 function writeOutput(destination, text, append = false) {
   if (destination) {
@@ -434,13 +467,13 @@ function writeError(destination, text) {
 rl.on("line", (line) => {
   const trimmed = line.trim();
   if (trimmed.length === 0) {
-    rl.prompt();
+    prompt();
     return;
   }
 
   const { args, stdoutRedirect, stdoutAppend, stderrRedirect, stderrAppend } = parseCommandLine(line);
   if (args.length === 0) {
-    rl.prompt();
+    prompt();
     return;
   }
 
@@ -464,7 +497,7 @@ rl.on("line", (line) => {
     if (stderrRedirect) {
       fs.closeSync(fs.openSync(stderrRedirect, stderrAppend ? "a" : "w"));
     }
-    rl.prompt();
+    prompt();
     return;
   }
 
@@ -473,7 +506,7 @@ rl.on("line", (line) => {
     if (stderrRedirect) {
       fs.closeSync(fs.openSync(stderrRedirect, stderrAppend ? "a" : "w"));
     }
-    rl.prompt();
+    prompt();
     return;
   }
 
@@ -500,7 +533,7 @@ rl.on("line", (line) => {
         writeError(stderrRedirect, `cd: ${dir}: No such file or directory`);
       }
     }
-    rl.prompt();
+    prompt();
     return;
   }
 
@@ -534,7 +567,7 @@ rl.on("line", (line) => {
           const targetCmd = cmdArgs[2];
           completionSpecs.set(targetCmd, { type: "C", path: scriptPath });
         }
-        rl.prompt();
+        prompt();
         return;
       }
 
@@ -544,7 +577,7 @@ rl.on("line", (line) => {
           const targetCmd = cmdArgs[1];
           completionSpecs.delete(targetCmd);
         }
-        rl.prompt();
+        prompt();
         return;
       }
 
@@ -559,12 +592,12 @@ rl.on("line", (line) => {
             console.log(`complete: ${target}: no completion specification`);
           }
         }
-        rl.prompt();
+        prompt();
         return;
       }
     }
 
-    rl.prompt();
+    prompt();
     return;
   }
 
@@ -647,7 +680,7 @@ rl.on("line", (line) => {
         // ignore
       }
 
-      rl.prompt();
+      prompt();
       return;
     }
 
@@ -673,7 +706,7 @@ rl.on("line", (line) => {
       if (stderrFd !== undefined) {
         fs.closeSync(stderrFd);
       }
-      rl.prompt();
+      prompt();
     });
     child.on("error", () => {
       if (stdoutFd !== undefined) {
@@ -683,11 +716,11 @@ rl.on("line", (line) => {
         fs.closeSync(stderrFd);
       }
       console.log(`${cmd}: command not found`);
-      rl.prompt();
+      prompt();
     });
     return;
   }
 
   console.log(`${cmd}: command not found`);
-  rl.prompt();
+  prompt();
 });
