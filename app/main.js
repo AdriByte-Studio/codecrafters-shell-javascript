@@ -577,7 +577,9 @@ rl.on("line", (line) => {
       const lastIndex = entries.length - 1;
       for (let i = 0; i < entries.length; i += 1) {
         const [jobId, info] = entries[i];
-        const marker = i === lastIndex ? "+" : " ";
+        let marker = " ";
+        if (i === lastIndex) marker = "+";
+        else if (i === lastIndex - 1) marker = "-";
         const status = "Running";
         const paddedStatus = status + "".padEnd(24 - status.length, " ");
         // Show command with trailing & for background
