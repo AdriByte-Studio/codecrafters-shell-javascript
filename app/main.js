@@ -446,6 +446,25 @@ function executeBuiltin(argv, { stdoutStream = process.stdout, stderrStream = pr
     return 0;
   }
 
+  if (name === "declare") {
+    if (args.length >= 1 && args[0] === "-p") {
+      const names = args.slice(1);
+      if (names.length === 0) {
+        return 0;
+      }
+      for (const variable of names) {
+        if (!Object.prototype.hasOwnProperty.call(process.env, variable)) {
+          stderrStream.write(`declare: ${variable}: not found\n`);
+          return 1;
+        }
+        const value = process.env[variable];
+        stdoutStream.write(`declare -x ${variable}="${value}"\n`);
+      }
+      return 0;
+    }
+    return 0;
+  }
+
   return 127;
 }
 
@@ -1063,6 +1082,20 @@ rl.on("line", (line) => {
       }
     }
     rl.prompt();
+    return;
+  }
+
+  if (cmd === "declare") {
+    const stdoutStream = stdoutRedirect
+      ? fs.createWriteStream(stdoutRedirect, { encoding: "utf8", flags: stdoutAppend ? "a" : "w" })
+      : process.stdout;
+    const stderrStream = stderrRedirect
+      ? fs.createWriteStream(stderrRedirect, { encoding: "utf8", flags: stderrAppend ? "a" : "w" })
+      : process.stderr;
+    executeBuiltin([cmd, ...cmdArgs], { stdoutStream, stderrStream });
+    if (stdoutRedirect) stdoutStream.end();
+    if (stderrRedirect) stderrStream.end();
+    prompt();
     return;
   }
 
