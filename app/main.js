@@ -580,10 +580,25 @@ rl.on("line", (line) => {
         let marker = " ";
         if (i === lastIndex) marker = "+";
         else if (i === lastIndex - 1) marker = "-";
-        const status = "Running";
-        const paddedStatus = status + "".padEnd(24 - status.length, " ");
-        // Show command with trailing & for background
-        console.log(`[${jobId}]${marker}  ${paddedStatus}${info.cmd} &`);
+
+        // Check if process still exists. If not, mark Done and remove.
+        let isRunning = true;
+        try {
+          process.kill(info.pid, 0);
+        } catch (err) {
+          isRunning = false;
+        }
+
+        if (isRunning) {
+          const status = "Running";
+          const paddedStatus = status + "".padEnd(24 - status.length, " ");
+          console.log(`[${jobId}]${marker}  ${paddedStatus}${info.cmd} &`);
+        } else {
+          const status = "Done";
+          const paddedStatus = status + "".padEnd(24 - status.length, " ");
+          console.log(`[${jobId}]${marker}  ${paddedStatus}${info.cmd}`);
+          jobs.delete(jobId);
+        }
       }
     }
     rl.prompt();
