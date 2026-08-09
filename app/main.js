@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const readline = require("readline");
 
 const rl = readline.createInterface({
@@ -38,7 +40,27 @@ rl.on("line", (line) => {
       if (builtins.has(target)) {
         console.log(`${target} is a shell builtin`);
       } else {
-        console.log(`${target}: not found`);
+        const pathDirs = process.env.PATH ? process.env.PATH.split(path.delimiter) : [];
+        let found = false;
+        for (const dir of pathDirs) {
+          if (!dir) {
+            continue;
+          }
+
+          const candidate = path.join(dir, target);
+          try {
+            fs.accessSync(candidate, fs.constants.F_OK | fs.constants.X_OK);
+            console.log(`${target} is ${candidate}`);
+            found = true;
+            break;
+          } catch (err) {
+            // File missing or not executable; continue searching.
+          }
+        }
+
+        if (!found) {
+          console.log(`${target}: not found`);
+        }
       }
     }
     rl.prompt();
