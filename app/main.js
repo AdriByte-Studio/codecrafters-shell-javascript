@@ -528,6 +528,16 @@ rl.on("line", (line) => {
         return;
       }
 
+      if (flag === "-r") {
+        // remove a registered completion: cmdArgs[1] = command
+        if (cmdArgs.length >= 2) {
+          const targetCmd = cmdArgs[1];
+          completionSpecs.delete(targetCmd);
+        }
+        rl.prompt();
+        return;
+      }
+
       if (flag === "-p") {
         if (cmdArgs.length >= 2) {
           const target = cmdArgs[1];
