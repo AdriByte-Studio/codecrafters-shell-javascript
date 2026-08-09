@@ -127,9 +127,28 @@ function completionHandler(line) {
           encoding: "utf8",
           env: Object.assign({}, process.env, { COMP_LINE: compLine, COMP_POINT: compPoint }),
         });
-        const candidate = out.split(/\r?\n/)[0].trim();
-        if (candidate.length > 0) {
-          return [[`${candidate} `], token];
+        const lines = Array.from(new Set(out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean))).sort();
+        if (lines.length === 1) {
+          return [[`${lines[0]} `], token];
+        }
+
+        if (lines.length > 1) {
+          if (completerState.prefix === token) {
+            completerState.count += 1;
+          } else {
+            completerState.prefix = token;
+            completerState.count = 1;
+          }
+
+          if (completerState.count === 1) {
+            process.stdout.write("\x07");
+            return [[], token];
+          }
+
+          const formatted = lines.join("  ");
+          process.stdout.write(`\n${formatted}\n`);
+          rl.prompt(true);
+          return [[], token];
         }
       } catch (err) {
         // on error, fall through to normal behavior (bell)
