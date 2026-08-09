@@ -1,0 +1,5 @@
+#!/bin/sh
+echo "Program was passed $# args (including program name)."
+echo "Arg #0 (program name): $0"
+echo "Arg #1: $1"
+echo "Arg #2: $2"

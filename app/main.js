@@ -42,8 +42,12 @@ function expandWords(words) {
   if (!words || words.length === 0) return words;
   const out = [];
   for (const w of words) {
-    // replace $NAME with the shell variable value (or empty string when undefined)
-    const expanded = String(w).replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_, name) => {
+    // First handle ${NAME} form to allow explicit name boundaries
+    let expanded = String(w).replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, name) => {
+      return Object.prototype.hasOwnProperty.call(shellVariables, name) ? shellVariables[name] : "";
+    });
+    // Then handle $NAME form
+    expanded = expanded.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_, name) => {
       return Object.prototype.hasOwnProperty.call(shellVariables, name) ? shellVariables[name] : "";
     });
     // If the original token contained a variable, splitting is allowed
@@ -718,6 +722,15 @@ function stripTrailingUnquotedAmp(line) {
 }
 
 function findExecutable(command) {
+  // If command contains a slash, treat it as a path and check directly.
+  try {
+    if (command.includes('/')) {
+      fs.accessSync(command, fs.constants.F_OK | fs.constants.X_OK);
+      return command;
+    }
+  } catch (err) {
+    // fall through to PATH lookup
+  }
   const pathDirs = process.env.PATH ? process.env.PATH.split(path.delimiter) : [];
   for (const dir of pathDirs) {
     if (!dir) {
