@@ -9,14 +9,27 @@ const rl = readline.createInterface({
 rl.prompt();
 
 rl.on("line", (line) => {
-  const command = line.trim();
-  if (command === "exit") {
+  const trimmed = line.trim();
+  if (trimmed.length === 0) {
+    rl.prompt();
+    return;
+  }
+
+  const parts = trimmed.split(/\s+/);
+  const cmd = parts[0];
+  const args = parts.slice(1);
+
+  if (cmd === "exit") {
     rl.close();
     process.exit(0);
   }
 
-  if (command.length > 0) {
-    console.log(`${command}: command not found`);
+  if (cmd === "echo") {
+    console.log(args.join(" "));
+    rl.prompt();
+    return;
   }
+
+  console.log(`${cmd}: command not found`);
   rl.prompt();
 });
