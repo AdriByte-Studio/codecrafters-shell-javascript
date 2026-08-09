@@ -63,6 +63,27 @@ function getFilenameMatches(prefix) {
   }
 }
 
+function getNestedPathMatches(token) {
+  const slashIndex = token.lastIndexOf("/");
+  if (slashIndex === -1) {
+    return [];
+  }
+
+  const dirToken = token.slice(0, slashIndex + 1);
+  const basenamePrefix = token.slice(slashIndex + 1);
+  const searchDir = path.resolve(process.cwd(), token.slice(0, slashIndex));
+
+  try {
+    const entries = fs.readdirSync(searchDir);
+    return entries
+      .filter((name) => name.startsWith(basenamePrefix))
+      .sort()
+      .map((name) => `${dirToken}${name}`);
+  } catch (err) {
+    return [];
+  }
+}
+
 function completionHandler(line) {
   const trimmed = line.trimStart();
   if (trimmed.length === 0) {
@@ -76,12 +97,22 @@ function completionHandler(line) {
   if (lastSpaceIndex !== -1) {
     const prefix = line.slice(lastSpaceIndex + 1);
     if (prefix.length > 0) {
-      const filenameHits = getFilenameMatches(prefix);
-      if (filenameHits.length === 1) {
+      const nestedHits = getNestedPathMatches(prefix);
+      if (nestedHits.length === 1) {
         completerState.prefix = null;
         completerState.count = 0;
-        return [[`${filenameHits[0]} `], prefix];
+        return [[`${nestedHits[0]} `], prefix];
       }
+
+      if (!prefix.includes("/")) {
+        const filenameHits = getFilenameMatches(prefix);
+        if (filenameHits.length === 1) {
+          completerState.prefix = null;
+          completerState.count = 0;
+          return [[`${filenameHits[0]} `], prefix];
+        }
+      }
+
       process.stdout.write("\x07");
       completerState.prefix = null;
       completerState.count = 0;
