@@ -4,7 +4,8 @@ const childProcess = require("child_process");
 const readline = require("readline");
 const stream = require("stream");
 
-const completions = ["echo", "exit"];
+const completions = ["echo", "exit", "history"];
+const history = [];
 
 function getPathExecutables(prefix) {
   const entries = new Set();
@@ -298,7 +299,7 @@ function prompt() {
   rl.prompt();
 }
 
-const builtins = new Set(["echo", "exit", "type", "pwd", "cd", "complete", "jobs"]);
+const builtins = new Set(["echo", "exit", "type", "pwd", "cd", "complete", "jobs", "history"]);
 
 function executeBuiltin(argv, { stdoutStream = process.stdout, stderrStream = process.stderr } = {}) {
   const name = argv[0];
@@ -380,6 +381,13 @@ function executeBuiltin(argv, { stdoutStream = process.stdout, stderrStream = pr
         const paddedStatus = status + "".padEnd(24 - status.length, " ");
         stdoutStream.write(`[${jobId}]${marker}  ${paddedStatus}${info.cmd}${isRunning ? ' &' : ''}\n`);
       }
+    }
+    return 0;
+  }
+
+  if (name === "history") {
+    for (let i = 0; i < history.length; i += 1) {
+      stdoutStream.write(`${String(i + 1).padStart(5)}  ${history[i]}\n`);
     }
     return 0;
   }
@@ -637,6 +645,7 @@ rl.on("line", (line) => {
     return;
   }
 
+  history.push(trimmed);
   const { args, stdoutRedirect, stdoutAppend, stderrRedirect, stderrAppend } = parseCommandLine(line);
   if (args.length === 0) {
     prompt();
@@ -808,6 +817,14 @@ rl.on("line", (line) => {
     return;
   }
 
+  if (cmd === "history") {
+    for (let i = 0; i < history.length; i += 1) {
+      console.log(`${String(i + 1).padStart(5)}  ${history[i]}`);
+    }
+    prompt();
+    return;
+  }
+
   if (cmd === "type") {
     if (cmdArgs.length > 0) {
       const target = cmdArgs[0];
@@ -822,7 +839,7 @@ rl.on("line", (line) => {
         }
       }
     }
-    rl.prompt();
+    prompt();
     return;
   }
 
