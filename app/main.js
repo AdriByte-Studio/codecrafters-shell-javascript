@@ -690,6 +690,19 @@ function loadHistfile() {
   }
 }
 
+function saveHistfile() {
+  const histfile = process.env.HISTFILE;
+  if (!histfile) {
+    return;
+  }
+  try {
+    const data = history.join("\n") + "\n";
+    fs.writeFileSync(histfile, data, { encoding: "utf8" });
+  } catch (err) {
+    // ignore write errors on exit
+  }
+}
+
 loadHistfile();
 
 prompt();
@@ -841,6 +854,7 @@ rl.on("line", (line) => {
   const cmdArgs = args.slice(1);
 
   if (cmd === "exit") {
+    saveHistfile();
     rl.close();
     process.exit(0);
   }
