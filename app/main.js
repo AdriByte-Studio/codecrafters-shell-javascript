@@ -4,9 +4,10 @@ const childProcess = require("child_process");
 const readline = require("readline");
 const stream = require("stream");
 
-const completions = ["echo", "exit", "history"];
+const completions = ["echo", "exit", "history", "declare"];
 const history = [];
 let historyAppendOffset = 0;
+const shellVariables = Object.create(null);
 
 function getPathExecutables(prefix) {
   const entries = new Set();
@@ -453,14 +454,30 @@ function executeBuiltin(argv, { stdoutStream = process.stdout, stderrStream = pr
         return 0;
       }
       for (const variable of names) {
-        if (!Object.prototype.hasOwnProperty.call(process.env, variable)) {
+        if (!Object.prototype.hasOwnProperty.call(shellVariables, variable)) {
           stderrStream.write(`declare: ${variable}: not found\n`);
           return 1;
         }
-        const value = process.env[variable];
-        stdoutStream.write(`declare -x ${variable}="${value}"\n`);
+        const value = shellVariables[variable];
+        const escaped = String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+        stdoutStream.write(`declare -- ${variable}="${escaped}"\n`);
       }
       return 0;
+    }
+
+    for (const arg of args) {
+      if (arg.startsWith("-")) {
+        continue;
+      }
+      const equalIndex = arg.indexOf("=");
+      if (equalIndex === -1) {
+        continue;
+      }
+      const variable = arg.slice(0, equalIndex);
+      const value = arg.slice(equalIndex + 1);
+      if (variable.length > 0) {
+        shellVariables[variable] = value;
+      }
     }
     return 0;
   }
