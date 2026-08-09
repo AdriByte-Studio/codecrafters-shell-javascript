@@ -9,7 +9,7 @@ const rl = readline.createInterface({
   prompt: "$ ",
 });
 
-const builtins = new Set(["echo", "exit", "type", "pwd"]);
+const builtins = new Set(["echo", "exit", "type", "pwd", "cd"]);
 
 function findExecutable(command) {
   const pathDirs = process.env.PATH ? process.env.PATH.split(path.delimiter) : [];
@@ -55,6 +55,27 @@ rl.on("line", (line) => {
 
   if (cmd === "pwd") {
     console.log(process.cwd());
+    rl.prompt();
+    return;
+  }
+
+  if (cmd === "cd") {
+    if (args.length > 0) {
+      const dir = args[0];
+      if (dir.startsWith("/")) {
+        try {
+          fs.accessSync(dir, fs.constants.F_OK);
+          const stat = fs.statSync(dir);
+          if (stat.isDirectory()) {
+            process.chdir(dir);
+          } else {
+            console.log(`cd: ${dir}: No such file or directory`);
+          }
+        } catch (err) {
+          console.log(`cd: ${dir}: No such file or directory`);
+        }
+      }
+    }
     rl.prompt();
     return;
   }
