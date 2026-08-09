@@ -577,8 +577,9 @@ rl.on("line", (line) => {
   const resolved = findExecutable(cmd);
   if (resolved) {
     if (runInBackground) {
-      // Start process in background and do not wait
-      const stdio = ["ignore", "ignore", "ignore"];
+      // Start process in background and do not wait.
+      // Background jobs should share the shell's stdout/stderr so their output appears.
+      const stdio = ["ignore", "inherit", "inherit"];
       let stdoutFd;
       let stderrFd;
       if (stdoutRedirect) {
