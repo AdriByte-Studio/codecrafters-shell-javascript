@@ -255,7 +255,7 @@ rl = readline.createInterface({
   completer: completionHandler,
 });
 
-const builtins = new Set(["echo", "exit", "type", "pwd", "cd", "complete"]);
+const builtins = new Set(["echo", "exit", "type", "pwd", "cd", "complete", "jobs"]);
 
 function parseCommandLine(line) {
   const tokens = [];
@@ -554,6 +554,12 @@ rl.on("line", (line) => {
       }
     }
 
+    rl.prompt();
+    return;
+  }
+
+  if (cmd === "jobs") {
+    // Empty implementation for now: no background jobs tracked yet
     rl.prompt();
     return;
   }
