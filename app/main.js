@@ -43,8 +43,14 @@ const completerState = {
 // Map of registered completion specs: command -> { type: 'C', path }
 const completionSpecs = new Map();
 // Background job tracking
-let nextJobId = 1;
 const jobs = new Map();
+
+function allocateJobId() {
+  if (jobs.size === 0) return 1;
+  const ids = Array.from(jobs.keys()).map((k) => Number(k));
+  const max = Math.max(...ids);
+  return max + 1;
+}
 
 function longestCommonPrefix(array) {
   if (array.length === 0) return "";
@@ -659,7 +665,7 @@ rl.on("line", (line) => {
 
       const child = childProcess.spawn(resolved, cmdArgs, { stdio, detached: true, argv0: cmd });
       // Register job with status and keep child for exit handling
-      const jobId = nextJobId++;
+      const jobId = allocateJobId();
       const info = { pid: child.pid, cmd: args.join(" "), child, status: "Running" };
       jobs.set(jobId, info);
       child.on("exit", () => {
