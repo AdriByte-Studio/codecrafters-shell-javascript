@@ -6,6 +6,7 @@ const stream = require("stream");
 
 const completions = ["echo", "exit", "history"];
 const history = [];
+let historyAppendOffset = 0;
 
 function getPathExecutables(prefix) {
   const entries = new Set();
@@ -409,6 +410,23 @@ function executeBuiltin(argv, { stdoutStream = process.stdout, stderrStream = pr
           fs.writeFileSync(argv[2], data, { encoding: "utf8" });
         } catch (err) {
           stderrStream.write(`history: cannot write ${argv[2]}\n`);
+          return 1;
+        }
+      }
+      return 0;
+    }
+
+    if (argv.length >= 2 && argv[1] === "-a") {
+      if (argv.length >= 3) {
+        try {
+          const lines = history.slice(historyAppendOffset);
+          if (lines.length > 0) {
+            const data = lines.join("\n") + "\n";
+            fs.appendFileSync(argv[2], data, { encoding: "utf8" });
+          }
+          historyAppendOffset = history.length;
+        } catch (err) {
+          stderrStream.write(`history: cannot append ${argv[2]}\n`);
           return 1;
         }
       }
@@ -877,6 +895,23 @@ rl.on("line", (line) => {
           fs.writeFileSync(cmdArgs[1], data, { encoding: "utf8" });
         } catch (err) {
           writeError(stderrRedirect, `history: cannot write ${cmdArgs[1]}`);
+        }
+      }
+      prompt();
+      return;
+    }
+
+    if (cmdArgs.length >= 1 && cmdArgs[0] === "-a") {
+      if (cmdArgs.length >= 2) {
+        try {
+          const lines = history.slice(historyAppendOffset);
+          if (lines.length > 0) {
+            const data = lines.join("\n") + "\n";
+            fs.appendFileSync(cmdArgs[1], data, { encoding: "utf8" });
+          }
+          historyAppendOffset = history.length;
+        } catch (err) {
+          writeError(stderrRedirect, `history: cannot append ${cmdArgs[1]}`);
         }
       }
       prompt();
