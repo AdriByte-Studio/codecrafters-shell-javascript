@@ -11,6 +11,50 @@ const rl = readline.createInterface({
 
 const builtins = new Set(["echo", "exit", "type", "pwd", "cd"]);
 
+function parseCommandLine(line) {
+  const args = [];
+  let current = "";
+  let inQuote = false;
+  let argStarted = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+
+    if (inQuote) {
+      if (char === "'") {
+        inQuote = false;
+      } else {
+        current += char;
+      }
+      continue;
+    }
+
+    if (char === "'") {
+      inQuote = true;
+      argStarted = true;
+      continue;
+    }
+
+    if (char === " " || char === "\t") {
+      if (argStarted) {
+        args.push(current);
+        current = "";
+        argStarted = false;
+      }
+      continue;
+    }
+
+    current += char;
+    argStarted = true;
+  }
+
+  if (argStarted || current.length > 0) {
+    args.push(current);
+  }
+
+  return args;
+}
+
 function findExecutable(command) {
   const pathDirs = process.env.PATH ? process.env.PATH.split(path.delimiter) : [];
   for (const dir of pathDirs) {
@@ -38,7 +82,7 @@ rl.on("line", (line) => {
     return;
   }
 
-  const parts = trimmed.split(/\s+/);
+  const parts = parseCommandLine(line);
   const cmd = parts[0];
   const args = parts.slice(1);
 
