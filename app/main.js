@@ -170,13 +170,19 @@ rl.on("line", (line) => {
   }
 
   if (cmd === "echo") {
-    writeOutput(redirect, cmdArgs.join(" "));
+    writeOutput(stdoutRedirect, cmdArgs.join(" "));
+    if (stderrRedirect) {
+      fs.closeSync(fs.openSync(stderrRedirect, "w"));
+    }
     rl.prompt();
     return;
   }
 
   if (cmd === "pwd") {
-    writeOutput(redirect, process.cwd());
+    writeOutput(stdoutRedirect, process.cwd());
+    if (stderrRedirect) {
+      fs.closeSync(fs.openSync(stderrRedirect, "w"));
+    }
     rl.prompt();
     return;
   }
@@ -198,10 +204,10 @@ rl.on("line", (line) => {
         if (stat.isDirectory()) {
           process.chdir(targetDir);
         } else {
-          console.log(`cd: ${dir}: No such file or directory`);
+          writeError(stderrRedirect, `cd: ${dir}: No such file or directory`);
         }
       } catch (err) {
-        console.log(`cd: ${dir}: No such file or directory`);
+        writeError(stderrRedirect, `cd: ${dir}: No such file or directory`);
       }
     }
     rl.prompt();
@@ -218,7 +224,7 @@ rl.on("line", (line) => {
         if (resolved) {
           console.log(`${target} is ${resolved}`);
         } else {
-          console.log(`${target}: not found`);
+          writeError(stderrRedirect, `${target}: not found`);
         }
       }
     }
