@@ -477,7 +477,7 @@ function executeBuiltin(argv, { stdoutStream = process.stdout, stderrStream = pr
       const variable = arg.slice(0, equalIndex);
       const value = arg.slice(equalIndex + 1);
       if (variable.length === 0 || !identifierPattern.test(variable)) {
-        stderrStream.write("declare: `" + arg + "`: not a valid identifier\n");
+        stderrStream.write("declare: `" + arg + "': not a valid identifier\n");
         return 1;
       }
       shellVariables[variable] = value;
