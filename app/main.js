@@ -73,7 +73,7 @@ rl.on("line", (line) => {
 
   const resolved = findExecutable(cmd);
   if (resolved) {
-    const child = childProcess.spawn(resolved, args, { stdio: "inherit" });
+    const child = childProcess.spawn(resolved, args, { stdio: "inherit", argv0: cmd });
     child.on("close", () => {
       rl.prompt();
     });
