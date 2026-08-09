@@ -133,6 +133,12 @@ function completionHandler(line) {
         }
 
         if (lines.length > 1) {
+          // Try LCP across completer-provided candidates
+          const common = longestCommonPrefix(lines);
+          if (common.length > token.length) {
+            return [[common], token];
+          }
+
           if (completerState.prefix === token) {
             completerState.count += 1;
           } else {
