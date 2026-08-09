@@ -107,36 +107,40 @@ function completionHandler(line) {
 
   const lastSpaceIndex = line.lastIndexOf(" ");
   if (lastSpaceIndex !== -1) {
-    const prefix = line.slice(lastSpaceIndex + 1);
-    const nestedHits = getNestedPathMatches(prefix);
-    if (nestedHits.length === 1) {
+    const token = line.slice(lastSpaceIndex + 1);
+    const nestedHits = getNestedPathMatches(token);
+    const filenameHits = token.includes("/") ? [] : getFilenameMatches(token);
+    const plainHits = filenameHits.map((entry) => ({
+      full: entry.name,
+      isDirectory: entry.isDirectory,
+    }));
+    const matches = nestedHits.length > 0 ? nestedHits : plainHits;
+
+    if (matches.length === 1) {
       completerState.prefix = null;
       completerState.count = 0;
-      const suffix = nestedHits[0].isDirectory ? "/" : " ";
-      return [[`${nestedHits[0].full}${suffix}`], prefix];
+      const suffix = matches[0].isDirectory ? "/" : " ";
+      return [[`${matches[0].full}${suffix}`], token];
     }
 
-    if (!prefix.includes("/")) {
-      const filenameHits = getFilenameMatches(prefix);
-      if (filenameHits.length === 1) {
-        completerState.prefix = null;
-        completerState.count = 0;
-        const suffix = filenameHits[0].isDirectory ? "/" : " ";
-        return [[`${filenameHits[0].name}${suffix}`], prefix];
-      }
+    if (completerState.prefix === token) {
+      completerState.count += 1;
+    } else {
+      completerState.prefix = token;
+      completerState.count = 1;
     }
 
-    if (prefix.length === 0) {
+    if (completerState.count === 1) {
       process.stdout.write("\x07");
-      completerState.prefix = null;
-      completerState.count = 0;
-      return [[], prefix];
+      return [[], token];
     }
 
-    process.stdout.write("\x07");
-    completerState.prefix = null;
-    completerState.count = 0;
-    return [[], prefix];
+    const formatted = matches
+      .map((entry) => `${entry.full}${entry.isDirectory ? "/" : ""}`)
+      .join("  ");
+    process.stdout.write(`\n${formatted}\n`);
+    rl.prompt(true);
+    return [[], token];
   }
 
   const hits = completions.filter((cmd) => cmd.startsWith(trimmed));
