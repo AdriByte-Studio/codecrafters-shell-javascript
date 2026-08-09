@@ -123,6 +123,17 @@ function completionHandler(line) {
       return [[`${matches[0].full}${suffix}`], token];
     }
 
+    // If multiple matches, try to complete to their longest common prefix (LCP)
+    if (matches.length > 1) {
+      const names = matches.map((m) => m.full);
+      const commonPrefix = longestCommonPrefix(names);
+      if (commonPrefix.length > token.length) {
+        completerState.prefix = null;
+        completerState.count = 0;
+        return [[commonPrefix], token];
+      }
+    }
+
     if (completerState.prefix === token) {
       completerState.count += 1;
     } else {
