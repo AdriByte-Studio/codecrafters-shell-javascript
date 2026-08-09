@@ -54,13 +54,40 @@ function longestCommonPrefix(array) {
   return prefix;
 }
 
+function getFilenameMatches(prefix) {
+  try {
+    const entries = fs.readdirSync(process.cwd());
+    return entries.filter((name) => name.startsWith(prefix)).sort();
+  } catch (err) {
+    return [];
+  }
+}
+
 function completionHandler(line) {
   const trimmed = line.trimStart();
-  if (trimmed.includes(" ") || trimmed.length === 0) {
+  if (trimmed.length === 0) {
     process.stdout.write("\x07");
     completerState.prefix = null;
     completerState.count = 0;
     return [[], line];
+  }
+
+  const lastSpaceIndex = line.lastIndexOf(" ");
+  if (lastSpaceIndex !== -1) {
+    const prefix = line.slice(lastSpaceIndex + 1);
+    if (prefix.length > 0) {
+      const filenameHits = getFilenameMatches(prefix);
+      if (filenameHits.length === 1) {
+        completerState.prefix = null;
+        completerState.count = 0;
+        return [[`${filenameHits[0]} `], prefix];
+      }
+      process.stdout.write("\x07");
+      completerState.prefix = null;
+      completerState.count = 0;
+      return [[], prefix];
+    }
+    return [[], prefix];
   }
 
   const hits = completions.filter((cmd) => cmd.startsWith(trimmed));
