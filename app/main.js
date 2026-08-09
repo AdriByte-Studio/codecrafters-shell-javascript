@@ -121,7 +121,12 @@ function completionHandler(line) {
     const spec = completionSpecs.get(commandName);
     if (spec && spec.type === "C") {
       try {
-        const out = childProcess.execFileSync(spec.path, [commandName, token, previousWord], { encoding: "utf8" });
+        const compLine = line.replace(/\r?\n$/, "");
+        const compPoint = String(Buffer.byteLength(compLine));
+        const out = childProcess.execFileSync(spec.path, [commandName, token, previousWord], {
+          encoding: "utf8",
+          env: Object.assign({}, process.env, { COMP_LINE: compLine, COMP_POINT: compPoint }),
+        });
         const candidate = out.split(/\r?\n/)[0].trim();
         if (candidate.length > 0) {
           return [[`${candidate} `], token];
