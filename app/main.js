@@ -386,6 +386,22 @@ function executeBuiltin(argv, { stdoutStream = process.stdout, stderrStream = pr
   }
 
   if (name === "history") {
+    if (argv.length >= 2 && argv[1] === "-r") {
+      if (argv.length >= 3) {
+        try {
+          const data = fs.readFileSync(argv[2], { encoding: "utf8" });
+          const lines = data.split(/\r?\n/).filter((line) => line.length > 0);
+          for (const line of lines) {
+            history.push(line);
+          }
+        } catch (err) {
+          stderrStream.write(`history: cannot read ${argv[2]}\n`);
+          return 1;
+        }
+      }
+      return 0;
+    }
+
     let start = 0;
     if (argv.length >= 2) {
       const requested = Number(argv[1]);
@@ -825,6 +841,22 @@ rl.on("line", (line) => {
   }
 
   if (cmd === "history") {
+    if (cmdArgs.length >= 1 && cmdArgs[0] === "-r") {
+      if (cmdArgs.length >= 2) {
+        try {
+          const data = fs.readFileSync(cmdArgs[1], { encoding: "utf8" });
+          const lines = data.split(/\r?\n/).filter((line) => line.length > 0);
+          for (const line of lines) {
+            history.push(line);
+          }
+        } catch (err) {
+          writeError(stderrRedirect, `history: cannot read ${cmdArgs[1]}`);
+        }
+      }
+      prompt();
+      return;
+    }
+
     let start = 0;
     if (cmdArgs.length >= 1) {
       const requested = Number(cmdArgs[0]);
