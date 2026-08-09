@@ -42,6 +42,9 @@ const completerState = {
 
 // Map of registered completion specs: command -> { type: 'C', path }
 const completionSpecs = new Map();
+// Background job tracking
+let nextJobId = 1;
+const jobs = new Map();
 
 function longestCommonPrefix(array) {
   if (array.length === 0) return "";
@@ -441,6 +444,13 @@ rl.on("line", (line) => {
     return;
   }
 
+  // Detect background execution token '&' at end of args
+  let runInBackground = false;
+  if (args.length > 0 && args[args.length - 1] === "&") {
+    runInBackground = true;
+    args.pop();
+  }
+
   const cmd = args[0];
   const cmdArgs = args.slice(1);
 
@@ -566,6 +576,45 @@ rl.on("line", (line) => {
 
   const resolved = findExecutable(cmd);
   if (resolved) {
+    if (runInBackground) {
+      // Start process in background and do not wait
+      const stdio = ["ignore", "ignore", "ignore"];
+      let stdoutFd;
+      let stderrFd;
+      if (stdoutRedirect) {
+        const stdoutFlag = stdoutAppend ? "a" : "w";
+        stdoutFd = fs.openSync(stdoutRedirect, stdoutFlag);
+        stdio[1] = stdoutFd;
+      }
+      if (stderrRedirect) {
+        const stderrFlag = stderrAppend ? "a" : "w";
+        stderrFd = fs.openSync(stderrRedirect, stderrFlag);
+        stdio[2] = stderrFd;
+      }
+
+      const child = childProcess.spawn(resolved, cmdArgs, { stdio, detached: true, argv0: cmd });
+      // Register job
+      const jobId = nextJobId++;
+      jobs.set(jobId, { pid: child.pid, cmd: args.join(" ") });
+      console.log(`[${jobId}] ${child.pid}`);
+
+      if (stdoutFd !== undefined) {
+        fs.closeSync(stdoutFd);
+      }
+      if (stderrFd !== undefined) {
+        fs.closeSync(stderrFd);
+      }
+
+      try {
+        child.unref();
+      } catch (e) {
+        // ignore
+      }
+
+      rl.prompt();
+      return;
+    }
+
     const stdio = ["inherit", "inherit", "inherit"];
     let stdoutFd;
     let stderrFd;
