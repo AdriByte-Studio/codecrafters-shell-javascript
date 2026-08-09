@@ -72,6 +72,9 @@ function parseCommandLine(line) {
       if (current === "1") {
         tokens.push("1>");
         current = "";
+      } else if (current === "2") {
+        tokens.push("2>");
+        current = "";
       } else {
         pushCurrent();
         tokens.push(">");
@@ -85,12 +88,20 @@ function parseCommandLine(line) {
   pushCurrent();
 
   const args = [];
-  let redirect = null;
+  let stdoutRedirect = null;
+  let stderrRedirect = null;
   for (let i = 0; i < tokens.length; i += 1) {
     const token = tokens[i];
     if (token === ">" || token === "1>") {
       if (i + 1 < tokens.length) {
-        redirect = tokens[i + 1];
+        stdoutRedirect = tokens[i + 1];
+        i += 1;
+      }
+      continue;
+    }
+    if (token === "2>") {
+      if (i + 1 < tokens.length) {
+        stderrRedirect = tokens[i + 1];
         i += 1;
       }
       continue;
@@ -98,7 +109,7 @@ function parseCommandLine(line) {
     args.push(token);
   }
 
-  return { args, redirect };
+  return { args, stdoutRedirect, stderrRedirect };
 }
 
 function findExecutable(command) {
@@ -129,6 +140,14 @@ function writeOutput(destination, text) {
   }
 }
 
+function writeError(destination, text) {
+  if (destination) {
+    fs.writeFileSync(destination, text + "\n", { encoding: "utf8" });
+  } else {
+    console.error(text);
+  }
+}
+
 rl.on("line", (line) => {
   const trimmed = line.trim();
   if (trimmed.length === 0) {
@@ -136,7 +155,7 @@ rl.on("line", (line) => {
     return;
   }
 
-  const { args, redirect } = parseCommandLine(line);
+  const { args, stdoutRedirect, stderrRedirect } = parseCommandLine(line);
   if (args.length === 0) {
     rl.prompt();
     return;
@@ -210,22 +229,33 @@ rl.on("line", (line) => {
   const resolved = findExecutable(cmd);
   if (resolved) {
     const stdio = ["inherit", "inherit", "inherit"];
-    let fd;
-    if (redirect) {
-      fd = fs.openSync(redirect, "w");
-      stdio[1] = fd;
+    let stdoutFd;
+    let stderrFd;
+    if (stdoutRedirect) {
+      stdoutFd = fs.openSync(stdoutRedirect, "w");
+      stdio[1] = stdoutFd;
+    }
+    if (stderrRedirect) {
+      stderrFd = fs.openSync(stderrRedirect, "w");
+      stdio[2] = stderrFd;
     }
 
     const child = childProcess.spawn(resolved, cmdArgs, { stdio, argv0: cmd });
     child.on("close", () => {
-      if (fd !== undefined) {
-        fs.closeSync(fd);
+      if (stdoutFd !== undefined) {
+        fs.closeSync(stdoutFd);
+      }
+      if (stderrFd !== undefined) {
+        fs.closeSync(stderrFd);
       }
       rl.prompt();
     });
     child.on("error", () => {
-      if (fd !== undefined) {
-        fs.closeSync(fd);
+      if (stdoutFd !== undefined) {
+        fs.closeSync(stdoutFd);
+      }
+      if (stderrFd !== undefined) {
+        fs.closeSync(stderrFd);
       }
       console.log(`${cmd}: command not found`);
       rl.prompt();
