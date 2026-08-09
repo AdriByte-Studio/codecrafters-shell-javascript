@@ -643,152 +643,108 @@ rl.on("line", (line) => {
     return;
   }
 
-  // Handle simple two-command pipelines separated by unquoted '|'
   const { line: strippedLine, hadAmp } = stripTrailingUnquotedAmp(line);
   const pipelineParts = splitUnquoted(strippedLine, '|').map((s) => s.trim());
   const pipelineMode = pipelineParts.length > 1;
   if (pipelineMode) {
-    // Only support two-stage pipelines for this stage. Join rest into second part if more.
-    const left = pipelineParts[0];
-    const right = pipelineParts.slice(1).join('|');
-    const leftParsed = parseCommandLine(left);
-    const rightParsed = parseCommandLine(right);
-    if (leftParsed.args.length === 0 || rightParsed.args.length === 0) {
+    const stages = pipelineParts.map((part) => parseCommandLine(part));
+    if (stages.some((stage) => stage.args.length === 0)) {
       prompt();
       return;
     }
 
-    const leftCmd = leftParsed.args[0];
-    const rightCmd = rightParsed.args[0];
-    const leftIsBuiltin = builtins.has(leftCmd);
-    const rightIsBuiltin = builtins.has(rightCmd);
+    const externalChildren = [];
+    let prevOutput = null;
+    let lastChild = null;
+    let lastStageIsBuiltin = false;
+    let activeExternal = 0;
+    let completedExternal = 0;
+    let prompted = false;
 
-    if (leftIsBuiltin && rightIsBuiltin) {
-      // both builtins: run left writing to a passThrough, then run right (which likely ignores stdin)
-      const pass = new stream.PassThrough();
-      executeBuiltin(leftParsed.args, { stdoutStream: pass, stderrStream: process.stderr });
-      // consume pass (avoid backpressure) but don't print since right builtin likely doesn't use it
-      pass.on('data', () => {});
-      executeBuiltin(rightParsed.args, { stdoutStream: process.stdout, stderrStream: process.stderr });
-      prompt();
-      return;
-    }
-
-    if (leftIsBuiltin && !rightIsBuiltin) {
-      // left builtin -> external right
-      const leftStream = new stream.PassThrough();
-      const rightResolved = findExecutable(rightCmd);
-      if (!rightResolved) {
-        console.log(`${rightCmd}: command not found`);
+    const maybePrompt = () => {
+      if (!prompted) {
+        prompted = true;
         prompt();
-        return;
       }
-      const rightChild = childProcess.spawn(rightResolved, rightParsed.args.slice(1), { stdio: ['pipe', 'inherit', 'inherit'], argv0: rightCmd });
-      // pipe before writing to ensure data is delivered
-      leftStream.pipe(rightChild.stdin);
-      // run builtin writing to leftStream, then end it
-      executeBuiltin(leftParsed.args, { stdoutStream: leftStream, stderrStream: process.stderr });
-      leftStream.end();
+    };
 
-      if (hadAmp) {
-        const jobId = allocateJobId();
-        const info = { pid: rightChild.pid, cmd: `${leftParsed.args.join(' ')} | ${rightParsed.args.join(' ')}`, child: rightChild, status: 'Running' };
-        jobs.set(jobId, info);
-        rightChild.on('exit', () => { info.status = 'Done'; });
-        console.log(`[${jobId}] ${rightChild.pid}`);
-        try { rightChild.unref(); } catch (e) {}
-        prompt();
-        return;
+    const onExternalClose = () => {
+      completedExternal += 1;
+      if (completedExternal === activeExternal) {
+        maybePrompt();
       }
+    };
 
-      rightChild.on('close', () => { prompt(); });
-      rightChild.on('error', () => { console.log(`${rightCmd}: command not found`); prompt(); });
-      return;
-    }
+    const onExternalError = () => {
+      maybePrompt();
+    };
 
-    if (!leftIsBuiltin && rightIsBuiltin) {
-      // left external -> right builtin
-      const leftResolved = findExecutable(leftCmd);
-      if (!leftResolved) {
-        console.log(`${leftCmd}: command not found`);
-        prompt();
-        return;
-      }
-      const leftChild = childProcess.spawn(leftResolved, leftParsed.args.slice(1), { stdio: ['inherit', 'pipe', 'inherit'], argv0: leftCmd });
-      // consume leftChild.stdout but do not print; pass to right builtin if needed
-      // For builtins like `type`, stdin is ignored; so discard data
-      if (leftChild.stdout) {
-        leftChild.stdout.on('data', () => {});
+    for (let i = 0; i < stages.length; i += 1) {
+      const stage = stages[i];
+      const cmd = stage.args[0];
+      const isBuiltin = builtins.has(cmd);
+      const isLast = i === stages.length - 1;
+
+      if (isBuiltin) {
+        const stdoutStream = isLast ? process.stdout : new stream.PassThrough();
+        executeBuiltin(stage.args, { stdoutStream, stderrStream: process.stderr });
+        if (!isLast) {
+          stdoutStream.end();
+        }
+        prevOutput = stdoutStream;
+        lastStageIsBuiltin = true;
+        continue;
       }
 
-      // run right builtin (it may ignore stdin)
-      executeBuiltin(rightParsed.args, { stdoutStream: process.stdout, stderrStream: process.stderr });
-
-      if (hadAmp) {
-        const jobId = allocateJobId();
-        const info = { pid: leftChild.pid, cmd: `${leftParsed.args.join(' ')} | ${rightParsed.args.join(' ')}`, child: leftChild, status: 'Running' };
-        jobs.set(jobId, info);
-        leftChild.on('exit', () => { info.status = 'Done'; });
-        console.log(`[${jobId}] ${leftChild.pid}`);
-        try { leftChild.unref(); } catch (e) {}
+      const resolved = findExecutable(cmd);
+      if (!resolved) {
+        console.log(`${cmd}: command not found`);
         prompt();
         return;
       }
 
-      leftChild.on('close', () => { prompt(); });
-      leftChild.on('error', () => { console.log(`${leftCmd}: command not found`); prompt(); });
-      return;
-    }
+      const stdio = [prevOutput ? 'pipe' : 'inherit', isLast ? 'inherit' : 'pipe', 'inherit'];
+      const child = childProcess.spawn(resolved, stage.args.slice(1), { stdio, argv0: cmd });
+      externalChildren.push(child);
+      activeExternal += 1;
+      lastChild = child;
+      lastStageIsBuiltin = false;
 
-    // both external (existing behavior)
-    const leftResolved = findExecutable(leftCmd);
-    const rightResolved = findExecutable(rightCmd);
-    if (!leftResolved) {
-      console.log(`${leftCmd}: command not found`);
-      prompt();
-      return;
-    }
-    if (!rightResolved) {
-      console.log(`${rightCmd}: command not found`);
-      prompt();
-      return;
-    }
+      if (prevOutput && child.stdin) {
+        prevOutput.pipe(child.stdin);
+      }
+      if (!isLast) {
+        prevOutput = child.stdout;
+      }
 
-    // Prepare stdio for left and right. Left stdout -> pipe, right stdin -> pipe.
-    const leftStdio = ['inherit', 'pipe', 'inherit'];
-    const rightStdio = ['pipe', 'inherit', 'inherit'];
-
-    // Start left process
-    const leftChild = childProcess.spawn(leftResolved, leftParsed.args.slice(1), { stdio: leftStdio, argv0: leftCmd });
-    // Start right process
-    const rightChild = childProcess.spawn(rightResolved, rightParsed.args.slice(1), { stdio: rightStdio, argv0: rightCmd });
-
-    // Pipe left stdout to right stdin
-    if (leftChild.stdout && rightChild.stdin) {
-      leftChild.stdout.pipe(rightChild.stdin);
+      child.on('close', onExternalClose);
+      child.on('error', onExternalError);
     }
 
     if (hadAmp) {
-      // Background pipeline: report job for the last process (right)
-      const jobId = allocateJobId();
-      const info = { pid: rightChild.pid, cmd: `${leftParsed.args.join(' ')} | ${rightParsed.args.join(' ')}`, child: rightChild, status: 'Running' };
-      jobs.set(jobId, info);
-      rightChild.on('exit', () => { info.status = 'Done'; });
-      console.log(`[${jobId}] ${rightChild.pid}`);
-      try { leftChild.unref(); } catch (e) {}
-      try { rightChild.unref(); } catch (e) {}
+      if (!lastStageIsBuiltin && lastChild) {
+        const jobId = allocateJobId();
+        const info = {
+          pid: lastChild.pid,
+          cmd: stages.map((stage) => stage.args.join(' ')).join(' | '),
+          child: lastChild,
+          status: 'Running',
+        };
+        jobs.set(jobId, info);
+        lastChild.on('exit', () => {
+          info.status = 'Done';
+        });
+        console.log(`[${jobId}] ${lastChild.pid}`);
+      }
       prompt();
       return;
     }
 
-    // Foreground pipeline: wait for right child to finish
-    rightChild.on('close', () => {
-      prompt();
-    });
-    rightChild.on('error', () => {
-      console.log(`${rightCmd}: command not found`);
-      prompt();
-    });
+    if (activeExternal > 0) {
+      return;
+    }
+
+    prompt();
     return;
   }
 
