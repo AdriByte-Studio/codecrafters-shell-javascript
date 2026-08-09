@@ -10,6 +10,10 @@ const rl = readline.createInterface({
   prompt: "$ ",
   completer: (line) => {
     const hits = completions.filter((cmd) => cmd.startsWith(line));
+    if (hits.length === 0) {
+      process.stdout.write("\x07");
+      return [[], line];
+    }
     return [hits.map((cmd) => `${cmd} `), line];
   },
 });
