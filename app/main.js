@@ -300,7 +300,7 @@ function prompt() {
   rl.prompt();
 }
 
-const builtins = new Set(["echo", "exit", "type", "pwd", "cd", "complete", "jobs", "history"]);
+const builtins = new Set(["echo", "exit", "type", "pwd", "cd", "complete", "jobs", "history", "declare"]);
 
 function executeBuiltin(argv, { stdoutStream = process.stdout, stderrStream = process.stderr } = {}) {
   const name = argv[0];
