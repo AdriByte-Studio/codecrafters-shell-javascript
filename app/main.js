@@ -673,6 +673,25 @@ function findExecutable(command) {
   return null;
 }
 
+function loadHistfile() {
+  const histfile = process.env.HISTFILE;
+  if (!histfile) {
+    return;
+  }
+  try {
+    const data = fs.readFileSync(histfile, { encoding: "utf8" });
+    const lines = data.split(/\r?\n/).filter((line) => line.length > 0);
+    for (const line of lines) {
+      history.push(line);
+    }
+    historyAppendOffset = history.length;
+  } catch (err) {
+    // if HISTFILE doesn't exist, start with empty history
+  }
+}
+
+loadHistfile();
+
 prompt();
 
 function writeOutput(destination, text, append = false) {
