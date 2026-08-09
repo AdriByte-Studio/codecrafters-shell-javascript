@@ -202,7 +202,7 @@ rl = readline.createInterface({
   completer: completionHandler,
 });
 
-const builtins = new Set(["echo", "exit", "type", "pwd", "cd"]);
+const builtins = new Set(["echo", "exit", "type", "pwd", "cd", "complete"]);
 
 function parseCommandLine(line) {
   const tokens = [];
