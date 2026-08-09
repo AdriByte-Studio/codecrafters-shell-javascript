@@ -386,7 +386,14 @@ function executeBuiltin(argv, { stdoutStream = process.stdout, stderrStream = pr
   }
 
   if (name === "history") {
-    for (let i = 0; i < history.length; i += 1) {
+    let start = 0;
+    if (argv.length >= 2) {
+      const requested = Number(argv[1]);
+      if (!Number.isNaN(requested) && requested >= 0) {
+        start = Math.max(history.length - requested, 0);
+      }
+    }
+    for (let i = start; i < history.length; i += 1) {
       stdoutStream.write(`${String(i + 1).padStart(5)}  ${history[i]}\n`);
     }
     return 0;
@@ -818,7 +825,14 @@ rl.on("line", (line) => {
   }
 
   if (cmd === "history") {
-    for (let i = 0; i < history.length; i += 1) {
+    let start = 0;
+    if (cmdArgs.length >= 1) {
+      const requested = Number(cmdArgs[0]);
+      if (!Number.isNaN(requested) && requested >= 0) {
+        start = Math.max(history.length - requested, 0);
+      }
+    }
+    for (let i = start; i < history.length; i += 1) {
       console.log(`${String(i + 1).padStart(5)}  ${history[i]}`);
     }
     prompt();
