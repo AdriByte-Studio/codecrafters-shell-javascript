@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const childProcess = require("child_process");
 const readline = require("readline");
+const stream = require("stream");
 
 const completions = ["echo", "exit"];
 
@@ -299,6 +300,93 @@ function prompt() {
 
 const builtins = new Set(["echo", "exit", "type", "pwd", "cd", "complete", "jobs"]);
 
+function executeBuiltin(argv, { stdoutStream = process.stdout, stderrStream = process.stderr } = {}) {
+  const name = argv[0];
+  const args = argv.slice(1);
+  if (name === "echo") {
+    const text = args.join(" ");
+    try {
+      stdoutStream.write(text + "\n");
+    } catch (e) {
+      // ignore
+    }
+    return 0;
+  }
+
+  if (name === "type") {
+    if (args.length > 0) {
+      const target = args[0];
+      if (builtins.has(target)) {
+        stdoutStream.write(`${target} is a shell builtin\n`);
+      } else {
+        const resolved = findExecutable(target);
+        if (resolved) {
+          stdoutStream.write(`${target} is ${resolved}\n`);
+        } else {
+          stderrStream.write(`${target}: not found\n`);
+          return 1;
+        }
+      }
+    }
+    return 0;
+  }
+
+  if (name === "pwd") {
+    stdoutStream.write(process.cwd() + "\n");
+    return 0;
+  }
+
+  if (name === "cd") {
+    if (args.length > 0) {
+      const dir = args[0];
+      let targetDir;
+      if (dir === "~") {
+        targetDir = process.env.HOME || dir;
+      } else if (dir.startsWith("/")) {
+        targetDir = dir;
+      } else {
+        targetDir = path.resolve(process.cwd(), dir);
+      }
+      try {
+        fs.accessSync(targetDir, fs.constants.F_OK);
+        const stat = fs.statSync(targetDir);
+        if (stat.isDirectory()) {
+          process.chdir(targetDir);
+        } else {
+          stderrStream.write(`cd: ${dir}: No such file or directory\n`);
+          return 1;
+        }
+      } catch (err) {
+        stderrStream.write(`cd: ${dir}: No such file or directory\n`);
+        return 1;
+      }
+    }
+    return 0;
+  }
+
+  if (name === "jobs") {
+    // simple jobs output to provided stdoutStream
+    const entries = Array.from(jobs.entries());
+    if (entries.length > 0) {
+      const lastIndex = entries.length - 1;
+      for (let i = 0; i < entries.length; i += 1) {
+        const [jobId, info] = entries[i];
+        let marker = " ";
+        if (i === lastIndex) marker = "+";
+        else if (i === lastIndex - 1) marker = "-";
+        let isRunning = true;
+        try { process.kill(info.pid, 0); } catch (e) { isRunning = false; }
+        const status = isRunning ? "Running" : "Done";
+        const paddedStatus = status + "".padEnd(24 - status.length, " ");
+        stdoutStream.write(`[${jobId}]${marker}  ${paddedStatus}${info.cmd}${isRunning ? ' &' : ''}\n`);
+      }
+    }
+    return 0;
+  }
+
+  return 127;
+}
+
 function parseCommandLine(line) {
   const tokens = [];
   let current = "";
@@ -572,6 +660,85 @@ rl.on("line", (line) => {
 
     const leftCmd = leftParsed.args[0];
     const rightCmd = rightParsed.args[0];
+    const leftIsBuiltin = builtins.has(leftCmd);
+    const rightIsBuiltin = builtins.has(rightCmd);
+
+    if (leftIsBuiltin && rightIsBuiltin) {
+      // both builtins: run left writing to a passThrough, then run right (which likely ignores stdin)
+      const pass = new stream.PassThrough();
+      executeBuiltin(leftParsed.args, { stdoutStream: pass, stderrStream: process.stderr });
+      // consume pass (avoid backpressure) but don't print since right builtin likely doesn't use it
+      pass.on('data', () => {});
+      executeBuiltin(rightParsed.args, { stdoutStream: process.stdout, stderrStream: process.stderr });
+      prompt();
+      return;
+    }
+
+    if (leftIsBuiltin && !rightIsBuiltin) {
+      // left builtin -> external right
+      const leftStream = new stream.PassThrough();
+      const rightResolved = findExecutable(rightCmd);
+      if (!rightResolved) {
+        console.log(`${rightCmd}: command not found`);
+        prompt();
+        return;
+      }
+      const rightChild = childProcess.spawn(rightResolved, rightParsed.args.slice(1), { stdio: ['pipe', 'inherit', 'inherit'], argv0: rightCmd });
+      // run builtin writing to leftStream, pipe into rightChild.stdin
+      executeBuiltin(leftParsed.args, { stdoutStream: leftStream, stderrStream: process.stderr });
+      leftStream.pipe(rightChild.stdin);
+
+      if (hadAmp) {
+        const jobId = allocateJobId();
+        const info = { pid: rightChild.pid, cmd: `${leftParsed.args.join(' ')} | ${rightParsed.args.join(' ')}`, child: rightChild, status: 'Running' };
+        jobs.set(jobId, info);
+        rightChild.on('exit', () => { info.status = 'Done'; });
+        console.log(`[${jobId}] ${rightChild.pid}`);
+        try { rightChild.unref(); } catch (e) {}
+        prompt();
+        return;
+      }
+
+      rightChild.on('close', () => { prompt(); });
+      rightChild.on('error', () => { console.log(`${rightCmd}: command not found`); prompt(); });
+      return;
+    }
+
+    if (!leftIsBuiltin && rightIsBuiltin) {
+      // left external -> right builtin
+      const leftResolved = findExecutable(leftCmd);
+      if (!leftResolved) {
+        console.log(`${leftCmd}: command not found`);
+        prompt();
+        return;
+      }
+      const leftChild = childProcess.spawn(leftResolved, leftParsed.args.slice(1), { stdio: ['inherit', 'pipe', 'inherit'], argv0: leftCmd });
+      // consume leftChild.stdout but do not print; pass to right builtin if needed
+      // For builtins like `type`, stdin is ignored; so discard data
+      if (leftChild.stdout) {
+        leftChild.stdout.on('data', () => {});
+      }
+
+      // run right builtin (it may ignore stdin)
+      executeBuiltin(rightParsed.args, { stdoutStream: process.stdout, stderrStream: process.stderr });
+
+      if (hadAmp) {
+        const jobId = allocateJobId();
+        const info = { pid: leftChild.pid, cmd: `${leftParsed.args.join(' ')} | ${rightParsed.args.join(' ')}`, child: leftChild, status: 'Running' };
+        jobs.set(jobId, info);
+        leftChild.on('exit', () => { info.status = 'Done'; });
+        console.log(`[${jobId}] ${leftChild.pid}`);
+        try { leftChild.unref(); } catch (e) {}
+        prompt();
+        return;
+      }
+
+      leftChild.on('close', () => { prompt(); });
+      leftChild.on('error', () => { console.log(`${leftCmd}: command not found`); prompt(); });
+      return;
+    }
+
+    // both external (existing behavior)
     const leftResolved = findExecutable(leftCmd);
     const rightResolved = findExecutable(rightCmd);
     if (!leftResolved) {
